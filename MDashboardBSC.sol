@@ -48,7 +48,7 @@ contract MDashboardBSC is OwnableUpgradeable {
         uint utilized;
         uint liquidity;
         uint pBASE;
-        uint pMERL;
+        uint pJUICY;
         uint pInBNB;
         uint pInBTC;
         uint pInETH;
@@ -92,6 +92,7 @@ contract MDashboardBSC is OwnableUpgradeable {
     /**
      * @dev Initializes the contract with given `vaultInfo_`.
      */
+     
     constructor(VaultInfo memory vaultInfo_) public {
         priceCalculator = MPriceCalculatorBSC(vaultInfo_.PriceCalculator);
         WBNB = vaultInfo_.WBNB;
@@ -297,22 +298,22 @@ contract MDashboardBSC is OwnableUpgradeable {
 
 
     function compoundingAPY(uint pid, uint compound, PoolTypes poolType) private view returns (uint) {
-        if (poolType == PoolTypes.MerlinStake) {
-            (uint merlPriceInBNB,) = priceCalculator.valueOfAsset(address(MERL), 1e18);
-            (uint rewardsPriceInBNB,) = priceCalculator.valueOfAsset(address(merlinPool.rewardsToken()), 1e18);
+        if (poolType == PoolTypes.JuicyStake) {
+            (uint juicyPriceInBNB,) = priceCalculator.valueOfAsset(address(JUICY), 1e18);
+            (uint rewardsPriceInBNB,) = priceCalculator.valueOfAsset(address(juicyPool.rewardsToken()), 1e18);
 
-            uint poolSize = merlinPool.totalSupply();
+            uint poolSize = juicyPool.totalSupply();
             if (poolSize == 0) {
                 poolSize = 1e18;
             }
 
-            uint rewardsOfYear = merlinPool.rewardRate().mul(1e18).div(poolSize).mul(365 days);
-            return rewardsOfYear.mul(rewardsPriceInBNB).div(merlPriceInBNB);
+            uint rewardsOfYear = JuicyPool.rewardRate().mul(1e18).div(poolSize).mul(365 days);
+            return rewardsOfYear.mul(rewardsPriceInBNB).div(juicyPriceInBNB);
         }
         /*
-        else if (poolType == PoolTypes.MerlinFlip) {
+        else if (poolType == PoolTypes.JuicyFlip) {
             (uint flipPriceInBNB,) = priceCalculator.valueOfAsset(address(bunnyBnbPool.token()), 1e18);
-            (uint merlPriceInBNB,) = priceCalculator.valueOfAsset(address(BUNNY), 1e18);
+            (uint juicyPriceInBNB,) = priceCalculator.valueOfAsset(address(BUNNY), 1e18);
 
             IBunnyMinter minter = IBunnyMinter(address(bunnyBnbPool.minter()));
             uint mintPerYear = minter.amountBunnyToMintForBunnyBNB(1e18, 365 days);
@@ -322,7 +323,7 @@ contract MDashboardBSC is OwnableUpgradeable {
         else if (poolType == PoolTypes.CakeStake || poolType == PoolTypes.FlipToFlip) {
             return cakeCompound(pid, compound);
         }
-        else if (poolType == PoolTypes.FlipToCake || poolType == PoolTypes.MerlinBNB) {
+        else if (poolType == PoolTypes.FlipToCake || poolType == PoolTypes.JuicyBNB) {
             // https://en.wikipedia.org/wiki/Geometric_series
             uint dailyApyOfPool = cakeCompound(pid, 1).div(compound);
             uint dailyApyOfCake = cakeCompound(0, 1).div(compound);
@@ -332,11 +333,11 @@ contract MDashboardBSC is OwnableUpgradeable {
         return 0;
     }
 
-    function apyOfPool(address pool, uint compound) public view returns (uint apyPool, uint apyMerlin) {
+    function apyOfPool(address pool, uint compound) public view returns (uint apyPool, uint apyJuicy) {
         PoolTypes poolType = poolTypes[pool];
         uint _apy = compoundingAPY(pancakePoolIds[pool], compound, poolType);
         apyPool = _apy;
-        apyMerlin = 0;
+        apyJuicy = 0;
 
         IMStrategy strategy = IMStrategy(pool);
         if (strategy.minter() != address(0)) {
@@ -345,7 +346,7 @@ contract MDashboardBSC is OwnableUpgradeable {
             uint merlinIncentive = _apy.mul(50).div(100).mul(inflation).div(1e18);
 
             apyPool = compounding;
-            apyMerlin = merlinIncentive;
+            apyJuicy = juicyIncentive;
         }
     }
 }
