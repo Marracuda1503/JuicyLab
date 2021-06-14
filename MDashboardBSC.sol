@@ -27,12 +27,12 @@ contract MDashboardBSC is OwnableUpgradeable {
     struct VaultInfo {
         address PriceCalculator;
         address WBNB;
-        address MERL;
+        address JUICY;
         address CAKE;
         address BTCB;
         address ETH;
         address VaultCakeToCake;
-        address MerlinPool;
+        address JuicyPool;
         address PancakeChef;
         address PancakeFactory;
     }
@@ -59,27 +59,27 @@ contract MDashboardBSC is OwnableUpgradeable {
     }
 
     enum PoolTypes {
-        MerlinStake, // no perf fee           // MerlinStake => MerlinPool
-        MerlinFlip_deprecated, // deprecated
+        JuicyStake, // no perf fee           // JuicyStake => JuicyPool
+        JuicyFlip_deprecated, // deprecated
         CakeStake, FlipToFlip, FlipToCake,    // CakeStake => CakeToCake
-        Merlin, // no perf fee                // Merlin => VaultMerlin
-        MerlinBNB,                            // MerlinBNB => VaultMerlinBNB
+        Juicy, // no perf fee                // Juicy => VaultJuicy
+        JuicyBNB,                            // JuicyBNB => VaultJuicyBNB
         Venus
     }
 
-    MPriceCalculatorBSC public priceCalculator;
+   JPriceCalculatorBSC public priceCalculator;
 
     uint private constant BLOCK_PER_YEAR = 10512000;
     uint private constant BLOCK_PER_DAY = 28800;
 
     address public WBNB;
-    address public MERL;
+    address public JUICY;
     address public CAKE;
     address public BTCB;
     address public ETH;
     address public VaultCakeToCake;
 
-    IMerlinPool private merlinPool;
+    IJuicyPool private juicyPool;
     IMasterChef private pancakeChef;
     IPancakeFactory private factory;
 
@@ -95,12 +95,12 @@ contract MDashboardBSC is OwnableUpgradeable {
     constructor(VaultInfo memory vaultInfo_) public {
         priceCalculator = MPriceCalculatorBSC(vaultInfo_.PriceCalculator);
         WBNB = vaultInfo_.WBNB;
-        MERL = vaultInfo_.MERL;
+        JUICY = vaultInfo_.JUICY;
         CAKE = vaultInfo_.CAKE;
         BTCB = vaultInfo_.BTCB;
         ETH = vaultInfo_.ETH;
         VaultCakeToCake = vaultInfo_.VaultCakeToCake;
-        merlinPool = IMerlinPool(vaultInfo_.MerlinPool);
+        juicyPool = IJuicyPool(vaultInfo_.JuicyPool);
         pancakeChef = IMasterChef(vaultInfo_.PancakeChef);
         factory = IPancakeFactory(vaultInfo_.PancakeFactory);
 
@@ -166,14 +166,14 @@ contract MDashboardBSC is OwnableUpgradeable {
     function profitOfPool(address pool, address account) public view returns (uint profit, uint merlin, uint pInBNB) {
         (uint profitCalculated, uint profitInBNB) = calculateProfit(pool, account);
         profit = profitCalculated;
-        merlin = 0;
+        juicy = 0;
         pInBNB = profitInBNB;
 
         if (!perfExemptions[pool]) {
             IMStrategy strategy = IMStrategy(pool);
             if (strategy.minter() != address(0)) {
                 profit = profit.mul(50).div(100);
-                merlin = IMMerlinMinter(strategy.minter()).amountMerlinToMint(profitInBNB.mul(50).div(100));
+                juicy = IMJuicyMinter(strategy.minter()).amountJuicyoMint(profitInBNB.mul(50).div(100));
             }
         }
     }
@@ -181,12 +181,14 @@ contract MDashboardBSC is OwnableUpgradeable {
     /* ========== TVL Calculation ========== */
 
     function tvlOfPool(address pool) public view returns (uint tvl) {
-        if (poolTypes[pool] == PoolTypes.MerlinStake) {
-            (, tvl) = priceCalculator.valueOfAsset(address(merlinPool.stakingToken()), merlinPool.balance());
+        if (poolTypes[pool] == PoolTypes.Juicystake) {
+            (, tvl) = priceCalculator.valueOfAsset(address(JuicyPool.stakingToken()), juicyPool.balance());
         }
         else {
             IMStrategy strategy = IMStrategy(pool);
             (, tvl) = priceCalculator.valueOfAsset(strategy.stakingToken(), strategy.balance());
+            
+            
 
             if (strategy.rewardsToken() == VaultCakeToCake) {
                 IMStrategy rewardsToken = IMStrategy(strategy.rewardsToken());
@@ -203,7 +205,7 @@ contract MDashboardBSC is OwnableUpgradeable {
         PoolInfoBSC memory poolInfo;
 
         IMStrategy strategy = IMStrategy(pool);
-        (uint pBASE, uint pMERL, uint pInBNB) = profitOfPool(pool, account);
+        (uint pBASE, uint pJUICY, uint pInBNB) = profitOfPool(pool, account);
 
         poolInfo.pool = pool;
         poolInfo.balance = strategy.balanceOf(account);
@@ -213,15 +215,15 @@ contract MDashboardBSC is OwnableUpgradeable {
         poolInfo.utilized = 0;
         poolInfo.liquidity = 0;
         poolInfo.pBASE = pBASE;
-        poolInfo.pMERL = pMERL;
+        poolInfo.pJUICY = pJUICY;
         poolInfo.pInBNB = pInBNB;
         poolInfo.pInBTC = (priceCalculator.priceOfBTC().mul(1e18)).div(priceCalculator.priceOfBNB()).mul(pInBNB).div(1e18);
         poolInfo.pInETH = (priceCalculator.priceOfETH().mul(1e18)).div(priceCalculator.priceOfBNB()).mul(pInBNB).div(1e18);
         poolInfo.portfolioInUSD = portfolioOfPoolInUSD(pool, account);
 
         PoolTypes poolType = poolTypeOf(pool);
-        if (poolType != PoolTypes.MerlinStake && strategy.minter() != address(0)) {
-            IMMerlinMinter minter = IMMerlinMinter(strategy.minter());
+        if (poolType != PoolTypes.JuicyStake && strategy.minter() != address(0)) {
+            IMJuicyMinter minter = IMJuicyMinter(strategy.minter());
             poolInfo.depositedAt = strategy.depositedAt(account);
             poolInfo.feeDuration = minter.WITHDRAWAL_FEE_FREE_PERIOD();
             poolInfo.feePercentage = minter.WITHDRAWAL_FEE();
@@ -243,8 +245,8 @@ contract MDashboardBSC is OwnableUpgradeable {
         PoolTypes poolType = poolTypes[pool];
 
         address stakingToken;
-        if (poolType == PoolTypes.MerlinStake) {
-            stakingToken = MERL;
+        if (poolType == PoolTypes.JuicyStake) {
+            stakingToken = JUICY;
         } else {
             stakingToken = IMStrategy(pool).stakingToken();
         }
@@ -256,19 +258,19 @@ contract MDashboardBSC is OwnableUpgradeable {
     function portfolioOfPoolInUSD(address pool, address account) internal view returns (uint) {
         uint tokenInUSD = stakingTokenValueInUSD(pool, account);
         (, uint profitInBNB) = calculateProfit(pool, account);
-        uint profitInMERL = 0;
+        uint profitInJUICY = 0;
 
         if (!perfExemptions[pool]) {
             IMStrategy strategy = IMStrategy(pool);
             if (strategy.minter() != address(0)) {
                 profitInBNB = profitInBNB.mul(70).div(100);
-                profitInMERL = IMMerlinMinter(strategy.minter()).amountMerlinToMint(profitInBNB.mul(30).div(100));
+                profitInJUICY = IMMerlinMinter(strategy.minter()).amountMerlinToMint(profitInBNB.mul(30).div(100));
             }
         }
 
         (, uint profitBNBInUSD) = priceCalculator.valueOfAsset(WBNB, profitInBNB);
-        (, uint profitMERLInUSD) = priceCalculator.valueOfAsset(MERL, profitInMERL);
-        return tokenInUSD.add(profitBNBInUSD).add(profitMERLInUSD);
+        (, uint profitJUICYInUSD) = priceCalculator.valueOfAsset(JUICY, profitInJUICY);
+        return tokenInUSD.add(profitBNBInUSD).add(profitJUICYInUSD);
     }
 
     function portfolioOf(address account, address[] memory pools) public view returns (uint deposits) {
