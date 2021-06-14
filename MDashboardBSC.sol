@@ -11,8 +11,8 @@ import "./interface/IMasterChef.sol";
 import "./interface/IPancakePair.sol";
 import "./interface/IPancakeFactory.sol";
 import "./interfaces/IMStrategy.sol";
-import "./interfaces/IMMerlinMinter.sol";
-import "./interfaces/IMerlinPool.sol";
+import "./interfaces/IMJuicyMinter.sol";
+import "./interfaces/IJuicyPool.sol";
 
 import "./library/SafeDecimal.sol";
 import "./MPriceCalculatorBSC.sol";
